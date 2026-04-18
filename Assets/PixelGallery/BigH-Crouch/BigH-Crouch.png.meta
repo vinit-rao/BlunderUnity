@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 0746ffe2a0331474cb10b9ff20758a6e
+guid: 9f184c0126f5f69408673e7f60f929c6
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -5643105228771564274
-    second: Sprite-0003_0
+      213: -6077963502051952343
+    second: BigH-Crouch12_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,23 +113,23 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Sprite-0003_0
+      name: BigH-Crouch12_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
         width: 16
-        height: 31
-      alignment: 0
-      pivot: {x: 0, y: 0}
+        height: 16
+      alignment: 2
+      pivot: {x: 0.5, y: 1}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: e05ebe061b9afa1b0800000000000000
-      internalID: -5643105228771564274
+      spriteID: 9297766b56cb6aba0800000000000000
+      internalID: -6077963502051952343
       vertices: []
       indices: 
       edges: []
@@ -138,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 2255d53208db05243a8f1c3e49748f43
     internalID: 0
     vertices: []
     indices: 
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Sprite-0003_0: -5643105228771564274
+      BigH-Crouch12_0: -6077963502051952343
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

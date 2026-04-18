@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: a6812401e7593a34abef4f0449f0951d
+guid: 01793b561b1e83d4a81fe5bfd9d3aa15
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 1768679433190182986
-    second: Sprite-0004_0
+      213: 6962030505532933304
+    second: BigH-skid11_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,7 +113,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Sprite-0004_0
+      name: BigH-skid11_0
       rect:
         serializedVersion: 2
         x: 0
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: a4017d8d29c9b8810800000000000000
-      internalID: 1768679433190182986
+      spriteID: 8b449bdbbd91e9060800000000000000
+      internalID: 6962030505532933304
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Sprite-0004_0: 1768679433190182986
+      BigH-skid11_0: 6962030505532933304
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
