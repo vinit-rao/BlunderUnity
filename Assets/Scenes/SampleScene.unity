@@ -214,13 +214,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2be9774920d2d4e459bac47717d7915b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
-  moveSpeed: 8
-  jumpForce: 8
+  moveSpeed: 6
+  jumpForce: 6
   rb: {fileID: 39608810}
   groundCheck: {fileID: 1958619699}
   groundLayer:
     serializedVersion: 2
     m_Bits: 64
+  anim: {fileID: 39608813}
 --- !u!95 &39608813
 Animator:
   serializedVersion: 7
