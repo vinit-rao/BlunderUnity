@@ -73,3 +73,9 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Ignore package contents
+[Pp]ackages/*
+# But KEEP the package "shopping lists"
+![Pp]ackages/manifest.json
+![Pp]ackages/packages-lock.json
