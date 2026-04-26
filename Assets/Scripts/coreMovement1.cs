@@ -15,10 +15,13 @@ public class coreMovement1 : MonoBehaviour
 
     private Rigidbody2D   rb;
     private BoxCollider2D col;
+    private Animator      animator;
 
     private bool  isGrounded;
+    private bool  wasGrounded;
     private bool  isCrouching;
-    private bool  isFacingRight = true;
+    private bool  isFacingRight  = true;
+    private bool  hasDoubleJump;
     private float attackTimer;
     private float lastHorizontal;
 
@@ -31,18 +34,21 @@ public class coreMovement1 : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────
     void Start()
     {
-        rb  = GetComponent<Rigidbody2D>();
-        col = GetComponent<BoxCollider2D>();
+        rb       = GetComponent<Rigidbody2D>();
+        col      = GetComponent<BoxCollider2D>();
+        animator = GetComponent<Animator>();
     }
 
     void Update()
     {
         attackTimer -= Time.deltaTime;
-        isGrounded = CheckGrounded();
+        wasGrounded = isGrounded;
+        isGrounded  = CheckGrounded();
         HandleMovement();
         HandleJump();
         HandleCrouch();
         HandleAttack();
+        UpdateAnimator();
     }
 
     // Uses col.bounds (world space) so scale never affects the calculation
@@ -95,10 +101,25 @@ public class coreMovement1 : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────
     void HandleJump()
     {
-        if (Input.GetButtonDown("Jump") && isGrounded && !isCrouching)
+        // Reset double jump on landing
+        if (isGrounded && !wasGrounded)
+            hasDoubleJump = true;
+
+        if (Input.GetButtonDown("Jump"))
         {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
-            Debug.Log("[Move] Jump");
+            if (isGrounded && !isCrouching)
+            {
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+                animator?.SetTrigger("Jump");
+                Debug.Log("[Move] Jump");
+            }
+            else if (!isGrounded && hasDoubleJump)
+            {
+                hasDoubleJump = false;
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce * 0.85f);
+                animator?.SetTrigger("DoubleJump");
+                Debug.Log("[Move] Double Jump");
+            }
         }
     }
 
@@ -164,6 +185,36 @@ public class coreMovement1 : MonoBehaviour
             }
         }
         Debug.Log($"[Attack] {CardinalNames[cardinal]} — {hitCount} hit(s)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ANIMATOR — drives all 6 core movement animation states
+    // Animator Controller parameters required:
+    //   Speed          (Float)   — 0 = Idle, >0 = Running
+    //   IsGrounded     (Bool)    — used to transition between ground and air states
+    //   VerticalVelocity (Float) — negative = Freefall, used to blend fall state
+    //   Jump           (Trigger) — fired on standard jump
+    //   DoubleJump     (Trigger) — fired on double jump
+    //   IsDashing      (Bool)    — true during a directional dash
+    //   DashDirectionX (Float)   — 1 = right dash, -1 = left dash
+    void UpdateAnimator()
+    {
+        if (animator == null) return;
+
+        float h = rb.linearVelocity.x;
+
+        // Idle / Running
+        animator.SetFloat("Speed", Mathf.Abs(h));
+
+        // Grounded state (transitions to/from Jump, Freefall)
+        animator.SetBool("IsGrounded", isGrounded);
+
+        // Freefall — negative VerticalVelocity while airborne drives the freefall state
+        animator.SetFloat("VerticalVelocity", rb.linearVelocity.y);
+
+        // Directional Dash — set IsDashing and direction each frame
+        // TODO: set animator.SetBool("IsDashing", isDashing) when dash is implemented
+        // TODO: set animator.SetFloat("DashDirectionX", isFacingRight ? 1f : -1f) on dash start
     }
 
     // ─────────────────────────────────────────────────────────────────────────

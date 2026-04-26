@@ -74,6 +74,18 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
+# Unity crash recovery folder
+/[Aa]ssets/[_]Recovery/
+/[Aa]ssets/[_]Recovery.meta
+
+# OS temporary files
+.DS_Store
+.DS_Store?
+Thumbs.db
+desktop.ini
+*~
+*.swp
+
 # Ignore package contents
 [Pp]ackages/*
 # But KEEP the package "shopping lists"
