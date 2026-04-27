@@ -3,27 +3,62 @@ using UnityEngine;
 public class coreMovement1 : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed            = 5f;
-    [SerializeField] private float jumpForce            = 10f;
+    [SerializeField] private float moveSpeed             = 5f;
     [SerializeField] private float crouchSpeedMultiplier = 0.5f;
+    [SerializeField] private float classSpeedMultiplier  = 1f;   // set per character class
 
-    [Header("Attack")]
+    [Header("Jump")]
+    [SerializeField] private float jumpForce             = 10f;
+    [SerializeField] private float doubleJumpForce       = 8.5f;
+    [SerializeField] private int   maxJumps              = 2;    // set to 3 for triple-jump classes
+    [SerializeField] private float freefallGravityScale  = 3f;   // faster/slower per class
+    [SerializeField] private float normalGravityScale    = 2f;
+
+    [Header("Dash")]
+    [SerializeField] private float dashSpeed       = 14f;
+    [SerializeField] private float dashDuration    = 0.18f;
+    [SerializeField] private float dashCooldown    = 0.4f;
+    [SerializeField] private float doubleTapWindow = 0.25f;
+
+    [Header("Melee Attack")]
     [SerializeField] private float     attackRange    = 1.5f;
     [SerializeField] private float     attackWedge    = 80f;
     [SerializeField] private float     attackCooldown = 0.3f;
     [SerializeField] private LayerMask enemyLayer;
 
+    [Header("Ranged Attack")]
+    [SerializeField] private float      rangedCooldown   = 0.5f;
+    [SerializeField] private GameObject projectilePrefab; // assign Projectile prefab in Inspector
+
+    // ─────────────────────────────────────────────────────────────────────────
     private Rigidbody2D   rb;
     private BoxCollider2D col;
+    private Animator      animator;
 
+    // Movement
     private bool  isGrounded;
+    private bool  wasGrounded;
     private bool  isCrouching;
     private bool  isFacingRight = true;
-    private float attackTimer;
     private float lastHorizontal;
 
-    // 4 cardinal snap directions
-    private static readonly Vector2[] Cardinals    = { Vector2.right, Vector2.up, Vector2.left, Vector2.down };
+    // Jump
+    private int  jumpsRemaining;
+    private bool wasFalling;
+
+    // Dash
+    private bool  isDashing;
+    private float dashTimer;
+    private float dashCooldownTimer;
+    private float lastTapTimeLeft;
+    private float lastTapTimeRight;
+
+    // Attack
+    private float attackTimer;
+    private float rangedTimer;
+
+    // 4 cardinal snap directions for melee
+    private static readonly Vector2[] Cardinals     = { Vector2.right, Vector2.up, Vector2.left, Vector2.down };
     private static readonly string[]  CardinalNames = { "Right", "Up", "Left", "Down" };
     private int     lastCardinal = -1;
     private Vector2 mouseSnapPos;
@@ -31,27 +66,44 @@ public class coreMovement1 : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────
     void Start()
     {
-        rb  = GetComponent<Rigidbody2D>();
-        col = GetComponent<BoxCollider2D>();
+        rb       = GetComponent<Rigidbody2D>();
+        col      = GetComponent<BoxCollider2D>();
+        animator = GetComponent<Animator>();
+
+        jumpsRemaining  = maxJumps;
+        rb.gravityScale = normalGravityScale;
     }
 
     void Update()
     {
-        attackTimer -= Time.deltaTime;
-        isGrounded = CheckGrounded();
+        attackTimer       -= Time.deltaTime;
+        rangedTimer       -= Time.deltaTime;
+        dashCooldownTimer -= Time.deltaTime;
+        dashTimer         -= Time.deltaTime;
+
+        wasGrounded = isGrounded;
+        isGrounded  = CheckGrounded();
+
+        HandleDash();
         HandleMovement();
         HandleJump();
         HandleCrouch();
-        HandleAttack();
+        HandleFreefall();
+        HandleMeleeAttack();
+        HandleRangedAttack();
+        HandleSpecialAbility1();
+        HandleSpecialAbility2();
+        UpdateAnimator();
     }
 
-    // Uses col.bounds (world space) so scale never affects the calculation
+    // ─────────────────────────────────────────────────────────────────────────
+    // GROUND CHECK — uses col.bounds (world space) so scale never matters
     bool CheckGrounded()
     {
         if (col == null) return false;
 
-        Bounds b      = col.bounds;                                   // already world-space
-        Vector2 origin = new Vector2(b.center.x, b.min.y - 0.02f);  // just below bottom edge
+        Bounds  b      = col.bounds;
+        Vector2 origin = new Vector2(b.center.x, b.min.y - 0.02f);
 
         RaycastHit2D hit = Physics2D.BoxCast(
             origin,
@@ -65,10 +117,13 @@ public class coreMovement1 : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // MOVEMENT — A/D, class speed multiplier applied per GDD
     void HandleMovement()
     {
+        if (isDashing) return;
+
         float h     = Input.GetAxisRaw("Horizontal");
-        float speed = isCrouching ? moveSpeed * crouchSpeedMultiplier : moveSpeed;
+        float speed = (isCrouching ? moveSpeed * crouchSpeedMultiplier : moveSpeed) * classSpeedMultiplier;
         rb.linearVelocity = new Vector2(h * speed, rb.linearVelocity.y);
 
         if (h != lastHorizontal)
@@ -93,17 +148,79 @@ public class coreMovement1 : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // DASH — double-tap A or D
+    void HandleDash()
+    {
+        if (Input.GetKeyDown(KeyCode.D))
+        {
+            if (Time.time - lastTapTimeRight <= doubleTapWindow && dashCooldownTimer <= 0f)
+                StartDash(1f);
+            else
+                lastTapTimeRight = Time.time;
+        }
+
+        if (Input.GetKeyDown(KeyCode.A))
+        {
+            if (Time.time - lastTapTimeLeft <= doubleTapWindow && dashCooldownTimer <= 0f)
+                StartDash(-1f);
+            else
+                lastTapTimeLeft = Time.time;
+        }
+
+        if (isDashing && dashTimer <= 0f)
+            EndDash();
+    }
+
+    void StartDash(float direction)
+    {
+        isDashing         = true;
+        dashTimer         = dashDuration;
+        dashCooldownTimer = dashCooldown;
+        rb.linearVelocity = new Vector2(dashSpeed * direction, 0f);
+        SetAnimBool ("IsDashing",      true);
+        SetAnimFloat("DashDirectionX", direction);
+        Debug.Log($"[Move] Dash {(direction > 0f ? "Right" : "Left")}");
+    }
+
+    void EndDash()
+    {
+        isDashing = false;
+        SetAnimBool("IsDashing", false);
+        Debug.Log("[Move] Dash End");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // JUMP — W or Spacebar; double/triple jump via maxJumps
     void HandleJump()
     {
-        if (Input.GetButtonDown("Jump") && isGrounded && !isCrouching)
+        if (isGrounded && !wasGrounded)
+        {
+            jumpsRemaining  = maxJumps;
+            rb.gravityScale = normalGravityScale;
+            Debug.Log("[Move] Landed");
+        }
+
+        bool jumpPressed = Input.GetButtonDown("Jump") || Input.GetKeyDown(KeyCode.W);
+        if (!jumpPressed || isCrouching) return;
+
+        if (jumpsRemaining == maxJumps && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            jumpsRemaining--;
+            SetAnimTrigger("Jump");
             Debug.Log("[Move] Jump");
+        }
+        else if (jumpsRemaining > 0 && !isGrounded)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, doubleJumpForce);
+            jumpsRemaining--;
+            SetAnimTrigger("DoubleJump");
+            Debug.Log(jumpsRemaining == 0 ? "[Move] Final Jump" : "[Move] Double Jump");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Hold S or Down Arrow to crouch (ground only)
+    // CROUCH — hold S; smaller hitbox per GDD, gates Special Ability #1
     void HandleCrouch()
     {
         bool hold = (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) && isGrounded;
@@ -111,24 +228,39 @@ public class coreMovement1 : MonoBehaviour
         if (hold && !isCrouching)
         {
             isCrouching = true;
+            SetAnimBool("IsCrouching", true);
             Debug.Log("[Move] Crouch Start");
         }
         else if (!hold && isCrouching)
         {
             isCrouching = false;
+            SetAnimBool("IsCrouching", false);
             Debug.Log("[Move] Crouch End");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    void HandleAttack()
+    // FREEFALL — gravity scale switches when falling; per-class via Inspector
+    void HandleFreefall()
+    {
+        bool falling = !isGrounded && rb.linearVelocity.y < 0f;
+
+        if (falling && !wasFalling) Debug.Log("[Move] Freefall");
+        wasFalling = falling;
+
+        rb.gravityScale = falling ? freefallGravityScale : normalGravityScale;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MELEE ATTACK — Left Mouse Button, snaps to nearest cardinal direction
+    void HandleMeleeAttack()
     {
         if (!Input.GetMouseButtonDown(0) || attackTimer > 0f) return;
 
-        attackTimer = attackCooldown;
+        attackTimer  = attackCooldown;
         int cardinal = GetSnappedCardinal(out Vector2 snapDir);
         lastCardinal = cardinal;
-        PerformAttack(cardinal, snapDir);
+        PerformMelee(cardinal, snapDir);
     }
 
     int GetSnappedCardinal(out Vector2 snapDir)
@@ -147,7 +279,7 @@ public class coreMovement1 : MonoBehaviour
         return best;
     }
 
-    void PerformAttack(int cardinal, Vector2 attackDir)
+    void PerformMelee(int cardinal, Vector2 attackDir)
     {
         Vector2      origin = (Vector2)transform.position + attackDir * (attackRange * 0.5f);
         Collider2D[] hits   = Physics2D.OverlapCircleAll(origin, attackRange * 0.5f, enemyLayer);
@@ -159,17 +291,93 @@ public class coreMovement1 : MonoBehaviour
             if (Vector2.Angle(attackDir, toTarget) <= attackWedge * 0.5f)
             {
                 hit.GetComponent<EnemyDummy>()?.TakeDamage(10f, attackDir);
-                Debug.Log($"[Attack] Hit '{hit.name}'");
+                Debug.Log($"[Melee] Hit '{hit.name}'");
                 hitCount++;
             }
         }
-        Debug.Log($"[Attack] {CardinalNames[cardinal]} — {hitCount} hit(s)");
+        Debug.Log($"[Melee] {CardinalNames[cardinal]} — {hitCount} hit(s)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RANGED ATTACK — Right Mouse Button, spawns Projectile prefab
+    void HandleRangedAttack()
+    {
+        if (!Input.GetMouseButtonDown(1) || rangedTimer > 0f) return;
+
+        rangedTimer = rangedCooldown;
+
+        Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 dir        = (mouseWorld - (Vector2)transform.position).normalized;
+
+        if (projectilePrefab != null)
+        {
+            Vector3 spawnPos = transform.position + (Vector3)(dir * 1f);
+            GameObject p = Instantiate(projectilePrefab, spawnPos, Quaternion.identity);
+            p.GetComponent<Projectile>()?.Init(dir, enemyLayer);
+            p.transform.right = dir;
+            Debug.Log($"[Ranged] Fired — direction {dir}");
+        }
+        else
+        {
+            Debug.LogWarning("[Ranged] No projectile prefab assigned in Inspector.");
+        }
+
+        SetAnimTrigger("RangedAttack");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SPECIAL ABILITY #1 — E while crouching
+    void HandleSpecialAbility1()
+    {
+        if (!Input.GetKeyDown(KeyCode.E) || !isCrouching) return;
+        // TODO: implement character-specific Special Ability #1
+        Debug.Log("[Ability] Special Ability #1 — triggered while crouching");
+        SetAnimTrigger("Ability1");
+    }
+
+    // SPECIAL ABILITY #2 — Q key (available from any context per GDD)
+    void HandleSpecialAbility2()
+    {
+        if (!Input.GetKeyDown(KeyCode.Q)) return;
+        // TODO: implement character-specific Special Ability #2
+        Debug.Log("[Ability] Special Ability #2");
+        SetAnimTrigger("Ability2");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ANIMATOR — safe helpers skip missing parameters silently
+    // Required parameters: Speed (Float), IsGrounded (Bool), VerticalVelocity (Float),
+    //   Jump (Trigger), DoubleJump (Trigger), IsDashing (Bool), DashDirectionX (Float),
+    //   IsCrouching (Bool), RangedAttack (Trigger), Ability1 (Trigger), Ability2 (Trigger)
+    void UpdateAnimator()
+    {
+        if (animator == null) return;
+        SetAnimFloat("Speed",            Mathf.Abs(rb.linearVelocity.x));
+        SetAnimBool ("IsGrounded",       isGrounded);
+        SetAnimFloat("VerticalVelocity", rb.linearVelocity.y);
+    }
+
+    void SetAnimFloat(string param, float value)
+    {
+        foreach (var p in animator.parameters)
+            if (p.name == param) { animator.SetFloat(param, value); return; }
+    }
+
+    void SetAnimBool(string param, bool value)
+    {
+        foreach (var p in animator.parameters)
+            if (p.name == param) { animator.SetBool(param, value); return; }
+    }
+
+    void SetAnimTrigger(string param)
+    {
+        foreach (var p in animator.parameters)
+            if (p.name == param) { animator.SetTrigger(param); return; }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     void OnDrawGizmosSelected()
     {
-        // Ground check box visualisation
         if (col != null)
         {
             Bounds  b      = col.bounds;
@@ -180,7 +388,7 @@ public class coreMovement1 : MonoBehaviour
 
         Vector3 center = transform.position;
 
-        // Outer circle
+        // Melee range
         Gizmos.color = new Color(1f, 1f, 1f, 0.15f);
         DrawCircle(center, attackRange, 32);
 

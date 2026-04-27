@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class EnemyDummy : MonoBehaviour
 {
@@ -12,8 +13,11 @@ public class EnemyDummy : MonoBehaviour
     [SerializeField] private float knockbackDuration = 0.15f;
 
     [Header("Flash on Hit")]
-    [SerializeField] private Color hitColor   = Color.red;
-    [SerializeField] private float flashTime  = 0.1f;
+    [SerializeField] private Color hitColor  = Color.red;
+    [SerializeField] private float flashTime = 0.1f;
+
+    [Header("Health Bar")]
+    [SerializeField] private Slider healthBar;
 
     [Header("Respawn")]
     [SerializeField] private float respawnDelay = 2f;
@@ -21,6 +25,7 @@ public class EnemyDummy : MonoBehaviour
     private Rigidbody2D   rb;
     private SpriteRenderer sr;
     private Color         originalColor;
+    private Vector3       spawnPosition;
     private bool          isDead;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -29,20 +34,28 @@ public class EnemyDummy : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         sr = GetComponent<SpriteRenderer>();
 
-        if (rb != null) rb.bodyType = RigidbodyType2D.Kinematic;
         if (sr != null) originalColor = sr.color;
 
+        spawnPosition = transform.position;
         currentHealth = maxHealth;
+
+        if (healthBar != null)
+        {
+            healthBar.maxValue = maxHealth;
+            healthBar.value    = currentHealth;
+        }
+
+        Debug.Log($"[Dummy] Spawned at {spawnPosition} — HP: {currentHealth}/{maxHealth}");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Call this from the player attack
     public void TakeDamage(float amount, Vector2 hitDirection)
     {
         if (isDead) return;
 
         currentHealth -= amount;
-        Debug.Log($"[Dummy] Hit for {amount} — HP: {currentHealth}/{maxHealth}");
+        if (healthBar != null) healthBar.value = currentHealth;
+        Debug.Log($"[Dummy] Hit for {amount} from direction {hitDirection} — HP: {currentHealth}/{maxHealth}");
 
         StartCoroutine(FlashRed());
         StartCoroutine(Knockback(hitDirection));
@@ -51,13 +64,13 @@ public class EnemyDummy : MonoBehaviour
             StartCoroutine(Die());
     }
 
-    // Overload with no knockback direction (attack from unknown angle)
     public void TakeDamage(float amount) => TakeDamage(amount, Vector2.zero);
 
     // ─────────────────────────────────────────────────────────────────────────
     IEnumerator FlashRed()
     {
         if (sr == null) yield break;
+        Debug.Log("[Dummy] Flash red");
         sr.color = hitColor;
         yield return new WaitForSeconds(flashTime);
         sr.color = originalColor;
@@ -67,19 +80,18 @@ public class EnemyDummy : MonoBehaviour
     {
         if (rb == null || direction == Vector2.zero) yield break;
 
-        rb.bodyType = RigidbodyType2D.Dynamic;
+        Debug.Log($"[Dummy] Knockback — direction {direction}, force {knockbackForce}");
         rb.linearVelocity = direction.normalized * knockbackForce;
         yield return new WaitForSeconds(knockbackDuration);
-        rb.linearVelocity = Vector2.zero;
-        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y); // stop horizontal, keep gravity
+        Debug.Log("[Dummy] Knockback ended");
     }
 
     IEnumerator Die()
     {
         isDead = true;
-        Debug.Log("[Dummy] Defeated — respawning...");
+        Debug.Log($"[Dummy] Defeated — respawning in {respawnDelay}s");
 
-        // Simple death flash
         for (int i = 0; i < 5; i++)
         {
             if (sr != null) sr.enabled = false;
@@ -89,29 +101,32 @@ public class EnemyDummy : MonoBehaviour
         }
 
         gameObject.SetActive(false);
+        Debug.Log("[Dummy] Hidden — waiting to respawn");
+
         yield return new WaitForSeconds(respawnDelay);
 
-        // Respawn
-        currentHealth = maxHealth;
-        isDead        = false;
+        transform.position = spawnPosition;
+        currentHealth      = maxHealth;
+        isDead             = false;
         gameObject.SetActive(true);
+        if (rb != null) rb.linearVelocity = Vector2.zero;
         if (sr != null) sr.color = originalColor;
+        if (healthBar != null) healthBar.value = maxHealth;
+
+        Debug.Log($"[Dummy] Respawned — HP: {currentHealth}/{maxHealth}");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Health bar in Scene view
     void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;
 
-        float pct    = currentHealth / maxHealth;
+        float   pct   = currentHealth / maxHealth;
         Vector3 base_ = transform.position + Vector3.up * 1.2f;
 
-        // Background
         Gizmos.color = Color.grey;
         Gizmos.DrawCube(base_, new Vector3(1f, 0.1f, 0f));
 
-        // Fill
         Gizmos.color = Color.Lerp(Color.red, Color.green, pct);
         Gizmos.DrawCube(base_ + Vector3.left * (1f - pct) * 0.5f, new Vector3(pct, 0.1f, 0f));
     }
