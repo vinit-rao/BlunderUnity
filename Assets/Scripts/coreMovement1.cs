@@ -13,12 +13,12 @@ public class coreMovement1 : MonoBehaviour
     [SerializeField] private int   maxJumps              = 2;    // set to 3 for triple-jump classes
     [SerializeField] private float freefallGravityScale  = 3f;   // faster/slower per class
     [SerializeField] private float normalGravityScale    = 2f;
+    [SerializeField] private float doubleJumpDelay = 0.15f; // how much delay you want after initial jump
 
     [Header("Dash")]
     [SerializeField] private float dashSpeed       = 14f;
     [SerializeField] private float dashDuration    = 0.18f;
     [SerializeField] private float dashCooldown    = 0.4f;
-    [SerializeField] private float doubleTapWindow = 0.25f;
 
     [Header("Melee Attack")]
     [SerializeField] private float     attackRange    = 1.5f;
@@ -45,13 +45,12 @@ public class coreMovement1 : MonoBehaviour
     // Jump
     private int  jumpsRemaining;
     private bool wasFalling;
+    private float lastJumpTime;
 
     // Dash
     private bool  isDashing;
     private float dashTimer;
     private float dashCooldownTimer;
-    private float lastTapTimeLeft;
-    private float lastTapTimeRight;
 
     // Attack
     private float attackTimer;
@@ -83,6 +82,12 @@ public class coreMovement1 : MonoBehaviour
 
         wasGrounded = isGrounded;
         isGrounded  = CheckGrounded();
+
+        // check to prevent instant double jumping if you walk off a ledge
+        if (wasGrounded && !isGrounded && rb.linearVelocity.y < 0f)
+        {
+            lastJumpTime = Time.time;
+        }
 
         HandleDash();
         HandleMovement();
@@ -148,25 +153,20 @@ public class coreMovement1 : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // DASH — double-tap A or D
+    // DASH — press lshift or rshift while moving
     void HandleDash()
     {
-        if (Input.GetKeyDown(KeyCode.D))
+        if (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift))
         {
-            if (Time.time - lastTapTimeRight <= doubleTapWindow && dashCooldownTimer <= 0f)
-                StartDash(1f);
-            else
-                lastTapTimeRight = Time.time;
+            if (dashCooldownTimer <= 0f)
+            {
+                float h = Input.GetAxisRaw("Horizontal");
+                if (h != 0f)
+                {
+                    StartDash(Mathf.Sign(h));
+                }
+            }
         }
-
-        if (Input.GetKeyDown(KeyCode.A))
-        {
-            if (Time.time - lastTapTimeLeft <= doubleTapWindow && dashCooldownTimer <= 0f)
-                StartDash(-1f);
-            else
-                lastTapTimeLeft = Time.time;
-        }
-
         if (isDashing && dashTimer <= 0f)
             EndDash();
     }
@@ -207,15 +207,20 @@ public class coreMovement1 : MonoBehaviour
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
             jumpsRemaining--;
+            lastJumpTime = Time.time;
             SetAnimTrigger("Jump");
             Debug.Log("[Move] Jump");
         }
         else if (jumpsRemaining > 0 && !isGrounded)
         {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, doubleJumpForce);
-            jumpsRemaining--;
-            SetAnimTrigger("DoubleJump");
-            Debug.Log(jumpsRemaining == 0 ? "[Move] Final Jump" : "[Move] Double Jump");
+            if (Time.time - lastJumpTime >= doubleJumpDelay)
+            {
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, doubleJumpForce);
+                jumpsRemaining--;
+                lastJumpTime = Time.time;
+                SetAnimTrigger("DoubleJump");
+                Debug.Log(jumpsRemaining == 0 ? "[Move] Final Jump" : "[Move] Double Jump");
+            }
         }
     }
 
