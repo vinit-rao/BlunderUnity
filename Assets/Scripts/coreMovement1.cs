@@ -376,6 +376,23 @@ public class coreMovement1 : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    void OnDrawGizmos()
+    {
+        if (!Application.isPlaying || !HitboxDebugger.showHitboxes) return;
+        if (lastCardinal < 0 || attackTimer <= 0f) return;
+
+        Vector3 center = transform.position;
+        float   mid    = Mathf.Atan2(Cardinals[lastCardinal].y, Cardinals[lastCardinal].x) * Mathf.Rad2Deg;
+
+        // Flash orange while in cooldown window
+        float alpha = Mathf.Clamp01(attackTimer / attackCooldown);
+        Gizmos.color = new Color(1f, 0.4f, 0f, alpha * 0.7f);
+        DrawWedge(center, attackRange, mid - attackWedge * 0.5f, mid + attackWedge * 0.5f, 16);
+
+        Gizmos.color = new Color(1f, 0.4f, 0f, alpha);
+        DrawCircle(center, attackRange, 32);
+    }
+
     void OnDrawGizmosSelected()
     {
         if (col != null)
