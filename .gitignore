@@ -79,3 +79,14 @@ crashlytics-build.properties
 # But KEEP the package "shopping lists"
 ![Pp]ackages/manifest.json
 ![Pp]ackages/packages-lock.json
+
+# Unity recovery / crash backup folder
+/[Aa]ssets/[_]Recovery/
+/[Aa]ssets/[_]Recovery.meta
+
+# OS-generated temp files
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
