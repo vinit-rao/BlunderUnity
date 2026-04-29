@@ -2,6 +2,7 @@
 // NOTE: This script is intentionally non-functional. All logic is stubbed with TODOs.
 // Attach alongside CoreMovementTemplate and CoreAttackTemplate on the same GameObject.
 
+#pragma warning disable CS0414
 using System.Collections;
 using UnityEngine;
 

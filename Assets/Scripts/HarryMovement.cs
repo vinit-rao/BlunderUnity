@@ -25,7 +25,8 @@ public class HarryMovement : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private LayerMask     enemyLayer;
-    [SerializeField] private GameObject    gundamProjectilePrefab; // M2 — assign slow heavy projectile prefab
+    [SerializeField] private GameObject    gundamGrenadePrefab;    // M2 + E — needs GundamGrenade script
+    [SerializeField] private GameObject    clusterBombletPrefab;   // E bomblets — leave empty to reuse gundamGrenadePrefab
 
     private Rigidbody2D    rb;
     private BoxCollider2D  col;
@@ -75,13 +76,15 @@ public class HarryMovement : MonoBehaviour
     [SerializeField] private float meleeCooldown = 0.35f;
 
     // ─────────────────────────────────────────────────────────────────────────
-    // M2 — GUNDAM THROW  (big slow linear projectile, high damage, high knockback)
+    // M2 — GUNDAM GRENADE  (right click — arc throw, sticks, explodes)
     // ─────────────────────────────────────────────────────────────────────────
 
-    [Header("M2 — Gundam Throw")]
-    [SerializeField] private float gundamDamage   = 30f;
-    [SerializeField] private float gundamSpeed    = 5f;   // slow projectile
-    [SerializeField] private float gundamCooldown = 1.2f;
+    [Header("M2 — Gundam Grenade")]
+    [SerializeField] private float grenadeDamage   = 40f;
+    [SerializeField] private float grenadeRadius   = 2.5f;
+    [SerializeField] private float grenadeFuse     = 1.3f;
+    [SerializeField] private float grenadeArcTime  = 1.5f;
+    [SerializeField] private float grenadeCooldown = 4f;
 
     // ─────────────────────────────────────────────────────────────────────────
     // FUEL  (shared resource for E — Dumgun Blast)
@@ -113,14 +116,18 @@ public class HarryMovement : MonoBehaviour
     // Explosive AOE. Costs 3 fuel. Slight delay. Can aim slightly up/down.
     // ─────────────────────────────────────────────────────────────────────────
 
-    [Header("E — Dumgun Blast")]
-    [SerializeField] private float dumgunDamage      = 35f;
-    [SerializeField] private float dumgunKnockback   = 18f;
-    [SerializeField] private float dumgunBlastRadius = 2.5f;
-    [SerializeField] private float dumgunFiringDelay = 0.4f;
-    [SerializeField] private float dumgunCooldown    = 5f;
-    [SerializeField] private float dumgunAimRange    = 20f;
-    [SerializeField] private int   dumgunFuelCost    = 3;
+    [Header("E — Cluster Grenade")]
+    [SerializeField] private float dumgunDamage          = 15f;   // damage per bomblet
+    [SerializeField] private float dumgunExplosionRadius = 1.2f;  // radius per bomblet
+    [SerializeField] private int   dumgunProjectileCount = 6;     // number of bomblets
+    [SerializeField] private float dumgunSpread          = 7f;    // bomblet outward speed
+    [SerializeField] private float dumgunUmbrellaAngle   = 160f;  // total spread of umbrella (degrees)
+    [SerializeField] private float dumgunFuseDuration    = 0.7f;  // bomblet fuse after split
+    [SerializeField] private float dumgunMainFuse        = 0.8f;  // main grenade fuse before splitting
+    [SerializeField] private float dumgunArcTime         = 1.5f;  // flight time to target
+    [SerializeField] private float dumgunCooldown        = 8f;
+    [SerializeField] private int   dumgunFuelCost        = 3;
+    [SerializeField] private int   reticleSteps          = 40;
 
     // ─────────────────────────────────────────────────────────────────────────
     // R — INFINITY CHARGE
@@ -156,6 +163,7 @@ public class HarryMovement : MonoBehaviour
     public  bool  isFacingRight = true;
     private bool  isGrounded;
     private bool  wasGrounded;
+    private bool  wasRunning;
     private bool  isCrouching;
     private bool  wasFalling;
     private float lastHorizontal;
@@ -198,6 +206,14 @@ public class HarryMovement : MonoBehaviour
     private bool  scrollActive;
     private float scrollExitTimer;
 
+    // Gundam Grenade reticle
+    private LineRenderer reticleLine;
+    private bool         reticleVisible = true;
+    private Camera       cam;
+
+    // Active cluster grenade (E again to detonate early)
+    private GundamGrenade activeCluster;
+
     // Input lock (blocks movement during certain abilities)
     private bool inputLocked;
 
@@ -220,11 +236,20 @@ public class HarryMovement : MonoBehaviour
 
         // Prevent tunneling through floors at high fall speed
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        cam = Camera.main;
+        if (cam == null) cam = FindFirstObjectByType<Camera>();
 
         if (enemyLayer.value == 0)
             Debug.LogWarning("[Harry] enemyLayer is not set — melee and abilities will not hit enemies. Assign it in the Inspector.");
 
+        SetupDumgunReticle();
+
         Debug.Log($"[Harry] Ready — HP: full | Fuel: {currentFuel}/{maxFuel}");
+    }
+
+    void OnDestroy()
+    {
+        if (reticleLine != null) Destroy(reticleLine.gameObject);
     }
 
     void Update()
@@ -240,6 +265,14 @@ public class HarryMovement : MonoBehaviour
         HandleScrollSession();
         TickCooldowns();
         RegenerateFuel();
+        UpdateDumgunReticle();
+
+        // Tab toggles the grenade reticle
+        if (Input.GetKeyDown(KeyCode.Tab))
+        {
+            reticleVisible = !reticleVisible;
+            Debug.Log($"[Harry] Grenade reticle {(reticleVisible ? "ON" : "OFF")}");
+        }
 
         if (!inputLocked)
         {
@@ -249,15 +282,15 @@ public class HarryMovement : MonoBehaviour
             HandleCrouch();
             HandleFreefall();
             HandleMeleeAttack();
-            HandleGundamThrow();
+            HandleGundamGrenade();
         }
 
         // Jetpack ticks every frame (manages inputLocked itself)
         HandleDumgunJetpack();
 
-        if (!isChanneling && !isJetpacking && !isFiringDumgun)
+        if (!isChanneling && !isJetpacking)
         {
-            HandleDumgunBlast();
+            HandleClusterGrenade();
             HandleInfinityCharge();
         }
 
@@ -448,7 +481,7 @@ public class HarryMovement : MonoBehaviour
 
     int GetSnappedCardinal(out Vector2 snapDir)
     {
-        Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 mouseWorld = cam != null ? MouseWorldPos() : (Vector2)transform.position + Vector2.right;
         mouseSnapPos       = mouseWorld;
         Vector2 dir        = (mouseWorld - (Vector2)transform.position).normalized;
         int best = 0; float bestDot = float.MinValue;
@@ -462,36 +495,21 @@ public class HarryMovement : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // M2 — GUNDAM THROW
+    // M2 — GUNDAM GRENADE  (right click)
     // ─────────────────────────────────────────────────────────────────────────
 
-    void HandleGundamThrow()
+    void HandleGundamGrenade()
     {
         if (!Input.GetMouseButtonDown(1) || gundamTimer > 0f) return;
+        if (gundamGrenadePrefab == null) { Debug.LogWarning("[Harry] Gundam Grenade — assign prefab."); return; }
 
-        gundamTimer = gundamCooldown;
-        Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        Vector2 dir        = (mouseWorld - (Vector2)transform.position).normalized;
-
-        if (gundamProjectilePrefab != null)
-        {
-            Vector3    spawnPos = transform.position + (Vector3)(dir * 1f);
-            GameObject p       = Instantiate(gundamProjectilePrefab, spawnPos, Quaternion.identity);
-            Projectile proj    = p.GetComponent<Projectile>();
-            if (proj != null)
-            {
-                proj.damage = gundamDamage;
-                proj.speed  = gundamSpeed;
-                proj.Init(dir, enemyLayer);
-            }
-            p.transform.right = dir;
-            Debug.Log($"[Harry] Gundam Throw fired — direction {dir}");
-            StartCoroutine(FlashColor(ColorGundam, 0.15f));
-        }
-        else
-        {
-            Debug.LogWarning("[Harry] Gundam Throw — no projectile prefab assigned.");
-        }
+        gundamTimer = grenadeCooldown;
+        Vector2 spawnPos = (Vector2)transform.position + Vector2.up * 0.3f;
+        Vector2 target   = MouseWorldPos();
+        Vector2 vel      = CalcGrenadeVelocity(spawnPos, target, grenadeArcTime);
+        ThrowGrenade(vel, gundamGrenadePrefab, grenadeDamage, grenadeRadius, grenadeFuse, false);
+        StartCoroutine(FlashColor(ColorGundam, 0.15f));
+        Debug.Log("[Harry] Gundam Grenade thrown");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -616,38 +634,132 @@ public class HarryMovement : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // E — DUMGUN BLAST
+    // E — CLUSTER GRENADE
+    // Arcs toward mouse, sticks, splits into bomblets that scatter and explode.
+    // Tab = toggle reticle.
     // ─────────────────────────────────────────────────────────────────────────
 
-    void HandleDumgunBlast()
+    void HandleClusterGrenade()
     {
         if (!Input.GetKeyDown(KeyCode.E)) return;
-        if (dumgunCooldownTimer > 0f) { Debug.Log($"[Harry] Dumgun cooldown — {dumgunCooldownTimer:0.0}s"); return; }
-        if (currentFuel < dumgunFuelCost) { Debug.Log($"[Harry] Dumgun — no fuel ({currentFuel:0.0}/{maxFuel})"); return; }
-        StartCoroutine(DumgunBlastCoroutine());
-    }
 
-    IEnumerator DumgunBlastCoroutine()
-    {
-        isFiringDumgun      = true;
+        // E again while one is in the air — detonate early
+        if (activeCluster != null)
+        {
+            activeCluster.Explode();
+            activeCluster = null;
+            Debug.Log("[Harry] Cluster — early detonate");
+            return;
+        }
+
+        if (dumgunCooldownTimer > 0f) { Debug.Log($"[Harry] Cluster cooldown — {dumgunCooldownTimer:0.0}s"); return; }
+        if (currentFuel < dumgunFuelCost) { Debug.Log($"[Harry] Cluster — no fuel ({currentFuel:0.0}/{maxFuel})"); return; }
+        if (gundamGrenadePrefab == null) { Debug.LogWarning("[Harry] Cluster Grenade — assign prefab."); return; }
+
         dumgunCooldownTimer = dumgunCooldown;
         currentFuel        -= dumgunFuelCost;
 
-        float   vert       = Input.GetAxisRaw("Vertical");
-        float   aimAngle   = Mathf.Clamp(vert * dumgunAimRange, -dumgunAimRange, dumgunAimRange);
-        float   baseAngle  = isFacingRight ? 0f : 180f;
-        Vector2 aimDir     = new Vector2(Mathf.Cos((baseAngle + aimAngle) * Mathf.Deg2Rad), Mathf.Sin(aimAngle * Mathf.Deg2Rad));
+        Vector2 spawnPos = (Vector2)transform.position + Vector2.up * 0.3f;
+        Vector2 mouse    = MouseWorldPos();
+        Vector2 vel      = CalcGrenadeVelocity(spawnPos, mouse, dumgunArcTime);
 
-        Debug.Log($"[Harry] Dumgun Blast — charging ({dumgunFiringDelay}s delay) — fuel: {currentFuel}/{maxFuel}");
-        SetColor(ColorDumgun);
-        yield return new WaitForSeconds(dumgunFiringDelay);
+        GameObject bombletPrefab = clusterBombletPrefab != null ? clusterBombletPrefab : gundamGrenadePrefab;
+        activeCluster = ThrowGrenade(vel, gundamGrenadePrefab, dumgunDamage, dumgunExplosionRadius, dumgunMainFuse,
+                                     true, dumgunProjectileCount, dumgunSpread, dumgunFuseDuration, bombletPrefab, dumgunUmbrellaAngle);
 
-        StartCoroutine(FlashColor(ColorLaunch, 0.1f));
-        Vector2 blastOrigin = (Vector2)transform.position + aimDir * dumgunBlastRadius * 0.5f;
-        BlastAOE(blastOrigin, dumgunBlastRadius, dumgunDamage, aimDir * dumgunKnockback);
-        Debug.Log($"[Harry] Dumgun Blast — FIRED toward {aimDir}");
+        StartCoroutine(FlashColor(ColorDumgun, 0.15f));
+        Debug.Log($"[Harry] Cluster Grenade thrown — {dumgunProjectileCount} bomblets — fuel: {currentFuel}/{maxFuel}");
+    }
 
-        isFiringDumgun = false;
+    GundamGrenade ThrowGrenade(Vector2 velocity, GameObject prefab, float damage, float radius, float fuse,
+                               bool cluster, int bombletCount = 0, float spread = 0f, float bombletFuse = 0f,
+                               GameObject bombletPrefab = null, float umbrellaAngle = 160f)
+    {
+        Vector2       spawnPos = (Vector2)transform.position + Vector2.up * 0.3f;
+        GameObject    go       = Instantiate(prefab, spawnPos, Quaternion.identity);
+        GundamGrenade gren     = go.GetComponent<GundamGrenade>();
+        if (gren != null)
+        {
+            gren.explosionDamage      = damage;
+            gren.explosionRadius      = radius;
+            gren.fuseDuration         = fuse;
+            gren.hitLayer             = enemyLayer;
+            gren.throwerCollider      = col;
+            gren.isCluster            = cluster;
+            gren.clusterCount         = bombletCount;
+            gren.clusterSpread        = spread;
+            gren.clusterBombletFuse   = bombletFuse;
+            gren.clusterBombletPrefab = bombletPrefab;
+            gren.clusterUmbrellaAngle = umbrellaAngle;
+            gren.Launch(velocity);
+        }
+        return gren;
+    }
+
+    Vector2 MouseWorldPos()
+    {
+        Vector3 mp = Input.mousePosition;
+        mp.z = cam.nearClipPlane + Mathf.Abs(cam.transform.position.z);
+        return cam.ScreenToWorldPoint(mp);
+    }
+
+    Vector2 CalcGrenadeVelocity(Vector2 start, Vector2 target, float arcTime)
+    {
+        float g  = Physics2D.gravity.y;
+        float dx = target.x - start.x;
+        float dy = target.y - start.y;
+        return new Vector2(
+            dx / arcTime,
+            dy / arcTime - 0.5f * g * arcTime
+        );
+    }
+
+    void SetupDumgunReticle()
+    {
+        GameObject obj    = new GameObject("DumgunReticle");
+        reticleLine       = obj.AddComponent<LineRenderer>();
+        reticleLine.positionCount = reticleSteps;
+        reticleLine.startWidth    = 0.06f;
+        reticleLine.endWidth      = 0.02f;
+        reticleLine.useWorldSpace = true;
+        reticleLine.sortingOrder  = 10;
+        reticleLine.material      = new Material(Shader.Find("Sprites/Default"));
+        reticleLine.startColor    = new Color(1f, 0.5f, 0f, 0.9f);
+        reticleLine.endColor      = new Color(1f, 0.5f, 0f, 0.1f);
+        reticleLine.enabled       = false;
+    }
+
+    void UpdateDumgunReticle()
+    {
+        if (reticleLine == null || cam == null) return;
+
+        bool m2Ready      = gundamTimer <= 0f;
+        bool eReady       = dumgunCooldownTimer <= 0f && currentFuel >= dumgunFuelCost;
+        bool shouldShow   = reticleVisible && (m2Ready || eReady) && !isChanneling && !isJetpacking && gundamGrenadePrefab != null;
+        reticleLine.enabled = shouldShow;
+        if (!shouldShow) return;
+
+        // Orange = M2 ready, yellow = E (cluster) ready
+        Color arcColor = eReady ? new Color(1f, 0.85f, 0f, 0.9f) : new Color(1f, 0.5f, 0f, 0.9f);
+        reticleLine.startColor = arcColor;
+        reticleLine.endColor   = new Color(arcColor.r, arcColor.g, arcColor.b, 0.1f);
+
+        Vector2 start   = (Vector2)transform.position + Vector2.up * 0.3f;
+        Vector2 mouse   = MouseWorldPos();
+        float   arcTime = eReady ? dumgunArcTime : grenadeArcTime;
+        Vector2 vel     = CalcGrenadeVelocity(start, mouse, arcTime);
+        float   g       = Physics2D.gravity.y;
+        float   dt      = arcTime / reticleSteps;
+
+        for (int i = 0; i < reticleSteps; i++)
+        {
+            float t = i * dt;
+            reticleLine.SetPosition(i, new Vector3(
+                start.x + vel.x * t,
+                start.y + vel.y * t + 0.5f * g * t * t,
+                0f
+            ));
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -762,6 +874,13 @@ public class HarryMovement : MonoBehaviour
         SetAnimBool ("IsGrounded",       isGrounded);
         SetAnimFloat("VerticalVelocity", rb.linearVelocity.y);
         SetAnimBool ("IsChanneling",     isChanneling);
+        bool running = Mathf.Abs(rb.linearVelocity.x) > 0.1f;
+        if (running != wasRunning)
+        {
+            Debug.Log($"[Harry] {(running ? "Running" : "Stopped running")}");
+            wasRunning = running;
+        }
+        SetAnimBool("isRunning", running);
     }
 
     void SetAnimFloat(string param, float value)
@@ -833,7 +952,7 @@ public class HarryMovement : MonoBehaviour
         if (isFiringDumgun)
         {
             Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.5f);
-            Gizmos.DrawWireSphere(transform.position, dumgunBlastRadius);
+            Gizmos.DrawWireSphere(transform.position, dumgunExplosionRadius);
         }
 
         // Infinity Charge hit radius

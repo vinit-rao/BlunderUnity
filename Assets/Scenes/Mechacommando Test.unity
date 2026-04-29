@@ -522,7 +522,7 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: -0.004290998, y: 0.004290879}
+  m_Offset: {x: -0.00086021423, y: 0.0012251735}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
@@ -532,7 +532,7 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 0.18473163, y: 0.23622239}
+  m_Size: {x: 0.29468405, y: 0.47104}
   m_EdgeRadius: 0
 --- !u!95 &660179113
 Animator:
@@ -630,8 +630,9 @@ MonoBehaviour:
   enemyLayer:
     serializedVersion: 2
     m_Bits: 0
-  gundamProjectilePrefab: {fileID: 1598122616582675653, guid: f1e35436023c88f7190efe9ee2757eeb, type: 3}
-  moveSpeed: 1.6
+  gundamGrenadePrefab: {fileID: 1598122616582675653, guid: 2526cbd3507e06010b8da08f9d8bf9e3, type: 3}
+  clusterBombletPrefab: {fileID: 1598122616582675653, guid: 2526cbd3507e06010b8da08f9d8bf9e3, type: 3}
+  moveSpeed: 5
   crouchSpeedMultiplier: 0.4
   jumpForce: 6
   doubleJumpForce: 16
@@ -646,9 +647,11 @@ MonoBehaviour:
   meleeWedge: 90
   meleeDamage: 18
   meleeCooldown: 0.35
-  gundamDamage: 30
-  gundamSpeed: 5
-  gundamCooldown: 1.2
+  grenadeDamage: 40
+  grenadeRadius: 2.5
+  grenadeFuse: 1.3
+  grenadeArcTime: 1.5
+  grenadeCooldown: 4
   maxFuel: 9
   fuelRegenRate: 1
   currentFuel: 0
@@ -661,12 +664,16 @@ MonoBehaviour:
   jetpackLaunchRadius: 2
   jetpackCooldown: 8
   dumgunDamage: 35
-  dumgunKnockback: 18
-  dumgunBlastRadius: 2.5
-  dumgunFiringDelay: 0.4
+  dumgunExplosionRadius: 1.5
+  dumgunProjectileCount: 6
+  dumgunSpread: 6
+  dumgunUmbrellaAngle: 160
+  dumgunFuseDuration: 1.3
+  dumgunMainFuse: 0.8
+  dumgunArcTime: 1.5
   dumgunCooldown: 5
-  dumgunAimRange: 20
   dumgunFuelCost: 3
+  reticleSteps: 40
   chargeChannelDuration: 2
   chargeDashSpeed: 30
   chargeDashDuration: 0.3
@@ -1448,6 +1455,7 @@ GameObject:
   - component: {fileID: 1772260697}
   - component: {fileID: 1772260696}
   - component: {fileID: 1772260695}
+  - component: {fileID: 1772260700}
   m_Layer: 7
   m_Name: EnemyDummy
   m_TagString: Untagged
@@ -1473,7 +1481,6 @@ MonoBehaviour:
   knockbackDuration: 0.15
   hitColor: {r: 1, g: 0, b: 0, a: 1}
   flashTime: 0.1
-  healthBar: {fileID: 1948942812}
   respawnDelay: 2
 --- !u!61 &1772260696
 BoxCollider2D:
@@ -1509,17 +1516,17 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
+  m_Offset: {x: 0.0005297959, y: 0.00011218339}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 8.28, y: 11.67}
-    newSize: {x: 8.28, y: 11.67}
+    oldSize: {x: 0.34, y: 0.46}
+    newSize: {x: 0.36, y: 0.47}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 10, y: 10}
+  m_Size: {x: 0.35105962, y: 0.47167492}
   m_EdgeRadius: 0
 --- !u!50 &1772260697
 Rigidbody2D:
@@ -1546,7 +1553,7 @@ Rigidbody2D:
     m_Bits: 0
   m_Interpolate: 0
   m_SleepingMode: 1
-  m_CollisionDetection: 0
+  m_CollisionDetection: 1
   m_Constraints: 4
 --- !u!212 &1772260698
 SpriteRenderer:
@@ -1597,12 +1604,12 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -8431108939386094424, guid: d74ab8fed254cb183936ec86f5d28c2a, type: 3}
+  m_Sprite: {fileID: -7219542275010057529, guid: 47300a65c3519e90e9fbca72a178c953, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 8.28, y: 11.67}
+  m_Size: {x: 0.36, y: 0.47}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -1617,12 +1624,34 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 3, y: 0, z: 0}
-  m_LocalScale: {x: 0.1, y: 0.1, z: 1}
+  m_LocalScale: {x: 5, y: 5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1081102277}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!95 &1772260700
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1772260694}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 282e4067ed0150bcf89076190115a788, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &1948942811
 GameObject:
   m_ObjectHideFlags: 0

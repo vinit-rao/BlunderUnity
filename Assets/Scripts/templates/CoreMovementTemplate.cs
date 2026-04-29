@@ -2,6 +2,7 @@
 // NOTE: This script is intentionally non-functional. All movement logic is stubbed with TODOs.
 // To create a character: copy this file, rename the class, fill in each TODO, and set the 6 stat values in the Inspector.
 
+#pragma warning disable CS0414
 using UnityEngine;
 
 /// <summary>

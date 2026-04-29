@@ -1,133 +1,139 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class EnemyDummy : MonoBehaviour
 {
     [Header("Health")]
-    [SerializeField] private float maxHealth = 100f;
-    [SerializeField] private float currentHealth;
+    public float maxHealth    = 200f;
+    public float currentHealth;
 
     [Header("Knockback")]
-    [SerializeField] private float knockbackForce    = 5f;
-    [SerializeField] private float knockbackDuration = 0.15f;
+    public float knockbackForce    = 8f;
+    public float knockbackDuration = 0.2f;
 
-    [Header("Flash on Hit")]
-    [SerializeField] private Color hitColor  = Color.red;
-    [SerializeField] private float flashTime = 0.1f;
-
-    [Header("Health Bar")]
-    [SerializeField] private Slider healthBar;
+    [Header("Flash")]
+    public Color hitColor  = Color.red;
+    public float flashTime = 0.12f;
 
     [Header("Respawn")]
-    [SerializeField] private float respawnDelay = 2f;
+    public float respawnDelay = 3f;
 
-    private Rigidbody2D   rb;
+    private Rigidbody2D    rb;
     private SpriteRenderer sr;
-    private Color         originalColor;
-    private Vector3       spawnPosition;
-    private bool          isDead;
+    private Collider2D     col;
+    private Color          originalColor;
+    private Vector3        spawnPos;
+    private bool           isDead;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    void Start()
+    void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
-        sr = GetComponent<SpriteRenderer>();
+        rb  = GetComponent<Rigidbody2D>();
+        sr  = GetComponentInChildren<SpriteRenderer>();
+        col = GetComponent<Collider2D>();
 
-        if (sr != null) originalColor = sr.color;
-
-        spawnPosition = transform.position;
-        currentHealth = maxHealth;
-
-        if (healthBar != null)
+        if (rb != null)
         {
-            healthBar.maxValue = maxHealth;
-            healthBar.value    = currentHealth;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            rb.freezeRotation         = true;
+            rb.linearDamping          = 8f;
         }
 
-        Debug.Log($"[Dummy] Spawned at {spawnPosition} — HP: {currentHealth}/{maxHealth}");
+        if (sr != null) originalColor = sr.color;
+    }
+
+    void Start()
+    {
+        spawnPos      = transform.position;
+        currentHealth = maxHealth;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    public void TakeDamage(float amount, Vector2 hitDirection)
+
+    public void TakeDamage(float amount, Vector2 direction)
     {
         if (isDead) return;
 
         currentHealth -= amount;
-        if (healthBar != null) healthBar.value = currentHealth;
-        Debug.Log($"[Dummy] Hit for {amount} from direction {hitDirection} — HP: {currentHealth}/{maxHealth}");
+        Debug.Log($"[Dummy] -{amount} HP ({currentHealth}/{maxHealth}) from {direction}");
 
-        StartCoroutine(FlashRed());
-        StartCoroutine(Knockback(hitDirection));
+        StopAllCoroutines();
+        StartCoroutine(FlashCoroutine());
+        if (direction != Vector2.zero)
+            StartCoroutine(KnockbackCoroutine(direction));
 
         if (currentHealth <= 0f)
-            StartCoroutine(Die());
+            StartCoroutine(DieCoroutine());
     }
 
     public void TakeDamage(float amount) => TakeDamage(amount, Vector2.zero);
 
     // ─────────────────────────────────────────────────────────────────────────
-    IEnumerator FlashRed()
+
+    IEnumerator FlashCoroutine()
     {
         if (sr == null) yield break;
-        Debug.Log("[Dummy] Flash red");
         sr.color = hitColor;
         yield return new WaitForSeconds(flashTime);
         sr.color = originalColor;
     }
 
-    IEnumerator Knockback(Vector2 direction)
+    IEnumerator KnockbackCoroutine(Vector2 direction)
     {
-        if (rb == null || direction == Vector2.zero) yield break;
-
-        Debug.Log($"[Dummy] Knockback — direction {direction}, force {knockbackForce}");
+        if (rb == null) yield break;
         rb.linearVelocity = direction.normalized * knockbackForce;
         yield return new WaitForSeconds(knockbackDuration);
-        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y); // stop horizontal, keep gravity
-        Debug.Log("[Dummy] Knockback ended");
+        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
     }
 
-    IEnumerator Die()
+    IEnumerator DieCoroutine()
     {
         isDead = true;
-        Debug.Log($"[Dummy] Defeated — respawning in {respawnDelay}s");
+        if (col != null) col.enabled = false;
+        if (rb  != null) rb.linearVelocity = Vector2.zero;
 
-        for (int i = 0; i < 5; i++)
+        // Flicker
+        for (int i = 0; i < 6; i++)
         {
-            if (sr != null) sr.enabled = false;
-            yield return new WaitForSeconds(0.1f);
-            if (sr != null) sr.enabled = true;
+            if (sr != null) sr.enabled = !sr.enabled;
             yield return new WaitForSeconds(0.1f);
         }
 
         gameObject.SetActive(false);
-        Debug.Log("[Dummy] Hidden — waiting to respawn");
-
         yield return new WaitForSeconds(respawnDelay);
 
-        transform.position = spawnPosition;
+        transform.position = spawnPos;
         currentHealth      = maxHealth;
         isDead             = false;
         gameObject.SetActive(true);
-        if (rb != null) rb.linearVelocity = Vector2.zero;
-        if (sr != null) sr.color = originalColor;
-        if (healthBar != null) healthBar.value = maxHealth;
+        if (col != null) col.enabled  = true;
+        if (rb  != null) rb.linearVelocity = Vector2.zero;
+        if (sr  != null) { sr.enabled = true; sr.color = originalColor; }
 
-        Debug.Log($"[Dummy] Respawned — HP: {currentHealth}/{maxHealth}");
+        Debug.Log("[Dummy] Respawned");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Health bar drawn above the sprite in Scene/Game Gizmos view
+
     void OnDrawGizmos()
     {
-        if (!Application.isPlaying) return;
+        if (!Application.isPlaying || isDead) return;
 
-        float   pct   = currentHealth / maxHealth;
-        Vector3 base_ = transform.position + Vector3.up * 1.2f;
+        Renderer rend = GetComponentInChildren<Renderer>();
+        float topY    = rend != null ? rend.bounds.max.y + 0.2f
+                                     : transform.position.y + 1.5f;
+        float width   = rend != null ? rend.bounds.size.x : 1f;
+        width         = Mathf.Max(width, 0.5f);
 
-        Gizmos.color = Color.grey;
-        Gizmos.DrawCube(base_, new Vector3(1f, 0.1f, 0f));
+        float pct    = Mathf.Clamp01(currentHealth / maxHealth);
+        Vector3 orig = new Vector3(transform.position.x - width * 0.5f, topY, 0f);
 
+        // Background
+        Gizmos.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+        Gizmos.DrawCube(orig + Vector3.right * width * 0.5f, new Vector3(width, 0.12f, 0f));
+
+        // Fill
         Gizmos.color = Color.Lerp(Color.red, Color.green, pct);
-        Gizmos.DrawCube(base_ + Vector3.left * (1f - pct) * 0.5f, new Vector3(pct, 0.1f, 0f));
+        Gizmos.DrawCube(orig + Vector3.right * width * pct * 0.5f, new Vector3(width * pct, 0.12f, 0f));
     }
 }
