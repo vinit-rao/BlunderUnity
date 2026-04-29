@@ -693,13 +693,22 @@ public class HarryMovement : MonoBehaviour
 
         float dashTimer    = 0f;
         bool  hitSomething = false;
+        var   alreadyHit   = new System.Collections.Generic.HashSet<GameObject>();
         while (dashTimer < chargeDashDuration)
         {
-            Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, chargeHitRadius, enemyLayer);
+            Collider2D[] hits = enemyLayer.value != 0
+                ? Physics2D.OverlapCircleAll(transform.position, chargeHitRadius, enemyLayer)
+                : Physics2D.OverlapCircleAll(transform.position, chargeHitRadius);
+
             foreach (var hit in hits)
             {
-                hit.GetComponent<EnemyDummy>()?.TakeDamage(chargeDamage, dashDir * chargeKnockback);
-                Debug.Log($"[Harry] Infinity Charge — HIT '{hit.name}'");
+                if (hit.gameObject == gameObject) continue;
+                if (alreadyHit.Contains(hit.gameObject)) continue;
+                EnemyDummy enemy = hit.GetComponent<EnemyDummy>();
+                if (enemy == null) continue;
+                alreadyHit.Add(hit.gameObject);
+                enemy.TakeDamage(chargeDamage, dashDir * chargeKnockback);
+                Debug.Log($"[Harry] Infinity Charge — HIT '{hit.name}' for {chargeDamage}");
                 hitSomething = true;
             }
             dashTimer += Time.deltaTime;

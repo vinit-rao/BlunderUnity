@@ -31,16 +31,20 @@ public class Projectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        Debug.Log($"[Ranged] Collider touched: '{other.name}' on layer {other.gameObject.layer} ({LayerMask.LayerToName(other.gameObject.layer)}) — hitLayer value: {hitLayer.value}");
+        if (other.gameObject == transform.parent?.gameObject) return;
 
-        if ((hitLayer.value & (1 << other.gameObject.layer)) == 0)
-        {
-            Debug.Log($"[Ranged] Layer mismatch — skipping '{other.name}'");
-            return;
-        }
+        // If hitLayer is assigned, filter by layer; otherwise hit any EnemyDummy
+        bool layerMatch = hitLayer.value != 0
+            ? (hitLayer.value & (1 << other.gameObject.layer)) != 0
+            : other.GetComponent<EnemyDummy>() != null;
 
-        other.GetComponent<EnemyDummy>()?.TakeDamage(damage, direction);
-        Debug.Log($"[Ranged] Projectile hit '{other.name}'");
+        if (!layerMatch) return;
+
+        EnemyDummy enemy = other.GetComponent<EnemyDummy>();
+        if (enemy == null) return;
+
+        enemy.TakeDamage(damage, direction);
+        Debug.Log($"[Ranged] Hit '{other.name}' for {damage}");
         Destroy(gameObject);
     }
 }
