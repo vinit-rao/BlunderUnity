@@ -2,6 +2,7 @@
 // NOTE: This script is intentionally non-functional. All attack logic is stubbed with TODOs.
 // To create a character: copy this file, rename the class, fill in each TODO, and tune frame data in the Inspector.
 
+#pragma warning disable CS0414 // template stubs — fields intentionally declared but unused
 using UnityEngine;
 
 /// <summary>

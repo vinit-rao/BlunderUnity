@@ -2,6 +2,7 @@
 // NOTE: This script is intentionally non-functional. All logic is stubbed with TODOs.
 // Attach alongside CoreMovementTemplate and CoreKnockbackTemplate on the same GameObject.
 
+#pragma warning disable CS0414 // template stubs — fields intentionally declared but unused
 using UnityEngine;
 
 /// <summary>

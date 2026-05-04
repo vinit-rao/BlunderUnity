@@ -7,10 +7,14 @@ using UnityEngine;
 public class Projectile : MonoBehaviour
 {
     [Header("Projectile")]
-    [SerializeField] public  float damage       = 8f;
-    [SerializeField] public  float speed        = 18f;
-    [SerializeField] public  float lifetime     = 3f;   // auto-destroy after this many seconds
-    [SerializeField] private LayerMask hitLayer;        // should match the player's enemyLayer
+    [SerializeField] public  float     damage          = 8f;
+    [SerializeField] public  float     speed           = 18f;
+    [SerializeField] public  float     lifetime        = 3f;
+    [SerializeField] private LayerMask hitLayer;
+
+    [Header("Explosion")]
+    public bool  explodeOnHit    = false;
+    public float explosionRadius = 1.5f;
 
     private Vector2      direction;
     private Rigidbody2D  rb;
@@ -31,16 +35,45 @@ public class Projectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        Debug.Log($"[Ranged] Collider touched: '{other.name}' on layer {other.gameObject.layer} ({LayerMask.LayerToName(other.gameObject.layer)}) — hitLayer value: {hitLayer.value}");
+        if (other.gameObject == transform.parent?.gameObject) return;
 
-        if ((hitLayer.value & (1 << other.gameObject.layer)) == 0)
+        bool layerMatch = hitLayer.value != 0
+            ? (hitLayer.value & (1 << other.gameObject.layer)) != 0
+            : other.GetComponent<EnemyDummy>() != null;
+
+        if (!layerMatch) return;
+
+        if (explodeOnHit)
         {
-            Debug.Log($"[Ranged] Layer mismatch — skipping '{other.name}'");
-            return;
+            Explode();
+        }
+        else
+        {
+            EnemyDummy enemy = other.GetComponent<EnemyDummy>();
+            if (enemy == null) return;
+            enemy.TakeDamage(damage, direction);
+            Debug.Log($"[Ranged] Hit '{other.name}' for {damage}");
         }
 
-        other.GetComponent<EnemyDummy>()?.TakeDamage(damage, direction);
-        Debug.Log($"[Ranged] Projectile hit '{other.name}'");
         Destroy(gameObject);
+    }
+
+    void Explode()
+    {
+        Collider2D[] hits = hitLayer.value != 0
+            ? Physics2D.OverlapCircleAll(transform.position, explosionRadius, hitLayer)
+            : Physics2D.OverlapCircleAll(transform.position, explosionRadius);
+
+        int count = 0;
+        foreach (var hit in hits)
+        {
+            if (hit.gameObject == transform.parent?.gameObject) continue;
+            EnemyDummy enemy = hit.GetComponent<EnemyDummy>();
+            if (enemy == null) continue;
+            Vector2 knockDir = ((Vector2)hit.transform.position - (Vector2)transform.position).normalized;
+            enemy.TakeDamage(damage, knockDir * 10f);
+            count++;
+        }
+        Debug.Log($"[Ranged] Exploded at {transform.position} — {count} hit(s) in radius {explosionRadius}");
     }
 }
